@@ -3928,6 +3928,128 @@ pub trait Itertools: Iterator {
             _ => Err(sh),
         }
     }
+
+    /// Applies `fn_if_true` if `condition` is `true`.
+    /// Otherwise applies `fn_if_false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// fn get_pairs(bytes: &[u8], overlap: bool) -> Vec<(u8, u8)> {
+    ///     bytes
+    ///         .iter()
+    ///         .copied()
+    ///         .either(overlap, Itertools::tuple_windows, Itertools::tuples)
+    ///         .collect()
+    /// }
+    ///
+    /// assert_eq!(get_pairs(b"abcd", false), vec![(b'a', b'b'), (b'c', b'd')]);
+    /// assert_eq!(get_pairs(b"abcd", true), vec![(b'a', b'b'), (b'b', b'c'), (b'c', b'd')]);
+    /// ```
+    ///
+    /// is the same as doing:
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// fn get_pairs(bytes: &[u8], overlap: bool) -> Vec<(u8, u8)> {
+    ///     if overlap {
+    ///         bytes
+    ///             .iter()
+    ///             .copied()
+    ///             .tuple_windows()
+    ///             .collect()
+    ///     } else {
+    ///         bytes
+    ///             .iter()
+    ///             .copied()
+    ///             .tuples()
+    ///             .collect()
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(get_pairs(b"abcd", false), vec![(b'a', b'b'), (b'c', b'd')]);
+    /// assert_eq!(get_pairs(b"abcd", true), vec![(b'a', b'b'), (b'b', b'c'), (b'c', b'd')]);
+    /// ```
+    fn either<L, R, F, G>(
+        self,
+        condition: bool,
+        fn_if_true: F,
+        fn_if_false: G,
+    ) -> Either<L::IntoIter, R::IntoIter>
+    where
+        Self: Sized,
+        F: FnOnce(Self) -> L,
+        G: FnOnce(Self) -> R,
+        L: IntoIterator,
+        R: IntoIterator<Item = L::Item>,
+    {
+        if condition {
+            Either::Left(fn_if_true(self).into_iter())
+        } else {
+            Either::Right(fn_if_false(self).into_iter())
+        }
+    }
+
+    /// Applies `fn_if_true` if and only if `condition` is `true`.
+    /// Otherwise does nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// fn u8_to_bools(value: u8, rtl: bool) -> [bool; 8] {
+    ///     let mut result = [false; 8];
+    ///     result
+    ///         .iter_mut()
+    ///         .apply_if(rtl, Iterator::rev)
+    ///         .enumerate()
+    ///         .for_each(|(i, b)| *b = ((value >> i) & 1) == 1);
+    ///
+    ///     result
+    /// }
+    ///
+    /// assert_eq!(u8_to_bools(0b00101101, false), [true, false, true, true, false, true, false, false]);
+    /// assert_eq!(u8_to_bools(0b00101101, true), [false, false, true, false, true, true, false, true]);
+    /// ```
+    ///
+    /// is the same as doing:
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// fn u8_to_bools(value: u8, rtl: bool) -> [bool; 8] {
+    ///     let mut result = [false; 8];
+    ///     if rtl {
+    ///         result
+    ///             .iter_mut()
+    ///             .rev()
+    ///             .enumerate()
+    ///             .for_each(|(i, b)| *b = ((value >> i) & 1) == 1);
+    ///     } else {
+    ///         result
+    ///             .iter_mut()
+    ///             .enumerate()
+    ///             .for_each(|(i, b)| *b = ((value >> i) & 1) == 1);
+    ///     }
+    ///
+    ///     result
+    /// }
+    ///
+    /// assert_eq!(u8_to_bools(0b00101101, false), [true, false, true, true, false, true, false, false]);
+    /// assert_eq!(u8_to_bools(0b00101101, true), [false, false, true, false, true, true, false, true]);
+    /// ```
+    fn apply_if<I, F>(self, condition: bool, fn_if_true: F) -> Either<I::IntoIter, Self>
+    where
+        Self: Sized,
+        F: FnOnce(Self) -> I,
+        I: IntoIterator<Item = Self::Item>,
+    {
+        self.either(condition, fn_if_true, |iter| iter)
+    }
 }
 
 impl<T> Itertools for T where T: Iterator + ?Sized {}
